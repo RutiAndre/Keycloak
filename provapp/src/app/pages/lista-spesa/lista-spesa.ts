@@ -1,61 +1,64 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { SpesaService, ShoppingItem } from '../../services/spesa-service'; // Importa l'interfaccia
+import { SpesaService } from '../../services/spesa-service';
+import { AuthService } from '../../core/auth.service';
+
+export interface ElementoSpesa {
+  id: number;
+  nome: string;
+}
 
 @Component({
   selector: 'app-lista-spesa',
-  standalone: true,
+  standalone: true, // Aggiunto se usi Angular moderno
   imports: [FormsModule],
   templateUrl: './lista-spesa.html',
   styleUrl: './lista-spesa.css',
 })
 export class ListaSpesa implements OnInit {
   private spesaService = inject(SpesaService);
+  public authService = inject(AuthService); // public per usarlo nell'HTML
 
-  // 1. Specifica che items contiene oggetti, non stringhe
-  items = signal<ShoppingItem[]>([]);
-  
-  // 2. Assicurati che newItem sia un signal
-  newItem = signal<string>(''); 
-  error = signal<string>('');
+  items = signal<ElementoSpesa[]>([]);
+  newItem = signal('');
+  error = signal('');
 
   ngOnInit(): void {
     this.caricaLista();
   }
 
+  // Creiamo un metodo a parte per caricare la lista, così lo usiamo più volte
   caricaLista(): void {
     this.spesaService.getItems().subscribe({
-      next: (res) => {
-        // Ora res.items è ShoppingItem[], quindi compatibile con il signal
-        this.items.set(res.items);
-      },
+      next: (res) => this.items.set(res.items),
       error: () => this.error.set('Errore nel caricamento della lista'),
     });
   }
 
   addItem(): void {
-    // NOTA: devi usare le parentesi () per leggere il valore del signal!
-    const testo = this.newItem().trim(); 
-
+    const testo = this.newItem().trim();
     if (!testo) return;
 
     this.spesaService.addItem(testo).subscribe({
-      next: () => {
-        this.newItem.set(''); // Pulisce il campo
+      next: (res) => {
+        // Se il backend restituisce la lista aggiornata:
+        if (res.items) {
+          this.items.set(res.items);
+        } else {
+          // Altrimenti ricarichiamo manualmente
+          this.caricaLista();
+        }
+        this.newItem.set('');
         this.error.set('');
-        this.caricaLista(); // Ricarica per avere il nuovo ID dal database
       },
-      error: () => this.error.set("Errore durante l'aggiunta"),
+      error: () => this.error.set("Errore nell'aggiunta (controlla i tuoi ruoli)"),
     });
   }
 
   deleteItem(id: number): void {
-    this.spesaService.deleteItem(id).subscribe({
-      next: () => {
-        // Rimuove l'elemento localmente senza ricaricare tutto
-        this.items.update(prev => prev.filter(i => i.id !== id));
-      },
-      error: () => this.error.set("Errore durante l'eliminazione")
-    });
-  }
+this.spesaService.deleteItem(id).subscribe({
+next: () => this.items.update(items => items.filter(i => i.id !== id)),
+error: () => this.error.set("Errore durante l'eliminazione"),
+});
+}
 }
